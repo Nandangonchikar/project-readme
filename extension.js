@@ -1,9 +1,4 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 const vscode = require('vscode');
-
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -17,69 +12,99 @@ function activate(context) {
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with  registerCommand
 	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('project-readme.generateReadme', function () {
+	let disposableGenerateReadme = vscode.commands.registerCommand('project-readme.generateReadme', async function () {
 		// The code you place here will be executed every time your command is executed
 		// Display a message box to the user
 		vscode.window.showInformationMessage('Generating readme for the document!');
+		//Create context navigation menu
+		createContextMenu();
+
 		// Code to get the contents of the open file in the editor
 		const editor = vscode.window.activeTextEditor;
 		if (editor) {
 			const document = editor.document;
 			const text = document.getText();
-			console.log(text);
-		
 
-			// code to create a new file in the same directory as the open file
-			const fs = require('fs');
-			const path = require('path');
-			const folderPath = path.dirname(document.fileName);
-			const filePath = path.join(folderPath, 'README.md');
+			try {
+				const generatedReadmeData= await generateReadmeAPI(text);
 
-			//cretate a context menu for the filed in the workspace
-			const menu = vscode.window.createQuickPick();
-			menu.items = [
-				{ label: 'Generate Readme', description: 'Generate a readme file for the project' },
-			];
-			menu.onDidChangeSelection(selection => {
-			if (selection[0]) {
-				vscode.window.showInformationMessage(`You picked ${selection[0].label}`);
+				if (generatedReadmeData) { // if readme is generated successfully then create the readme file
+					await createReadmeFile(generatedReadmeData);
+					vscode.window.showInformationMessage('Readme generated successfully!');
+				}
+				else {
+					vscode.window.showErrorMessage("API call did not generate any data");
+				}
 			}
-			});
-			menu.show();
-
-
-			// code to write the contents of the open file to the new file
-			fs.writeFile(filePath, 'Readme data generated from chatAPI goes here', function (err) {
-				if (err) {
-					return console.log(err);
-				}
-				console.log('The file was saved!');
-				vscode.window.showInformationMessage('Readme created successfully!');
-				}
-			);
+			catch (err) {
+				console.log(err);
+			}
 		}
 		
 		
-
-	async function createReadme() {
-		const fs = require('fs');
-		const path = require('path');
-		const folderPath = path.dirname(document.fileName);
-		const filePath = path.join(folderPath, 'README.md');
-		fs.writeFile(filePath, 'Readme data generated from chatAPI goes here', function (err) {
-			if (err) {
-				return console.log(err);
-			}
-			console.log('The file was saved!');
-			vscode.window.showInformationMessage('Readme created successfully!');
-			}
-		);
+	async function generateReadmeAPI(text) {
+		// call openAPI to generate readme here
+		// return the generated readme as a variable
+		// retrieve API key from settings.json
+		const apiKey = vscode.workspace.getConfiguration().get('project-readme.apiKey');
+		if(!apiKey){
+			vscode.window.showErrorMessage("API key not found. Please configure API key in using command set API Keys");
+			return;
+		}
+		console.log(`API key is ${apiKey}`);
+		
+		console.log(text);
+		return "API call done and readme doc succesfully created"
+	}
+	// Create a readme file in the workspace folder and write data to it
+	async function createReadmeFile(data) {  
+		const currentDir = vscode.workspace.rootPath;
+		const readmePath = vscode.Uri.file(`${currentDir}/readme.md`);
+		console.log(readmePath);
+		await vscode.workspace.fs.writeFile(readmePath, Buffer.from(data, 'utf8'));
+		console.log("Readme file created");
+		return readmePath;
 	}
 
+	function createContextMenu(){
+		//cretate a context menu for the filed in the workspace
+		const menu = vscode.window.createQuickPick();
+		menu.items = [
+			{ label: 'Generate Readme', description: 'Generate a readme file for the project' },
+		];
+		menu.onDidChangeSelection(selection => {
+		if (selection[0]) {
+			vscode.window.showInformationMessage(`You picked ${selection[0].label}`);
+		}
+		});
+		menu.show();
+	}
 
 	});
 
-	context.subscriptions.push(disposable);
+	// Register the command to open settings for API key configuration
+    let disposableConfigureAPIKeys = vscode.commands.registerCommand('project-readme.setAPIKey',  () => {
+        // await vscode.commands.executeCommand('workbench.action.openSettings');
+		vscode.window.showInputBox({
+			prompt: 'Enter your API key',
+			placeHolder: 'API key',
+			password: true // If the API key should be masked
+		  }).then(apiKey => {
+			if (apiKey !== undefined) {
+			  saveAPIKey(apiKey);
+			}
+		  });
+
+		//   function to save the API key in the settings.json file
+		function saveAPIKey(apiKey) {
+			const config = vscode.workspace.getConfiguration();
+			config.update('project-readme.apiKey', apiKey, true);
+			vscode.window.showInformationMessage('API key saved successfully!');
+		}
+
+    });
+
+	context.subscriptions.push(disposableGenerateReadme,disposableConfigureAPIKeys);
 }
 
 // This method is called when your extension is deactivated
